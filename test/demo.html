@@ -1,0 +1,119 @@
+<!doctype html>
+<!--
+  Standalone harness for developing the panel UI without loading the extension.
+  Open via a local server from the project root, e.g.:
+    python3 -m http.server 8000  →  http://localhost:8000/test/demo.html
+  It stubs the `browser` API and feeds fake HAR entries to the panel.
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Network+ demo</title>
+  <style>html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; display: block; }</style>
+</head>
+<body>
+<iframe id="panel"></iframe>
+<script>
+  const dark = new URLSearchParams(location.search).has('dark');
+  const frame = document.getElementById('panel');
+  frame.addEventListener('load', () => {
+    const w = frame.contentWindow;
+    w.document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  });
+  // Stub must exist before panel.js runs, so inject it via srcdoc-free approach:
+  window.browser = { devtools: { inspectedWindow: { tabId: 1 }, panels: { themeName: dark ? 'dark' : 'light', onThemeChanged: { addListener() {} } } } };
+
+  const json = (o) => JSON.stringify(o);
+  const hdr = (o) => Object.entries(o).map(([name, value]) => ({ name, value }));
+  let id = 0;
+  const t0 = Date.now() - 4000;
+  let offset = 0;
+  function entry(method, url, { body, status = 200, mime = 'application/json', time = 40, size = 1200, at } = {}) {
+    offset = at ?? offset + 60;
+    return {
+      startedDateTime: new Date(t0 + offset).toISOString(), time,
+      request: { method, url, headers: hdr({ accept: '*/*', 'accept-language': 'en-US', authorization: 'Bearer eyJhbGciOi…', 'content-type': 'application/json', 'x-request-id': 'req-' + (id + 1) }),
+        queryString: [...new URL(url).searchParams].map(([name, value]) => ({ name, value })),
+        postData: body ? { mimeType: 'application/json', text: body } : undefined },
+      response: { status, statusText: status === 200 ? 'OK' : '', httpVersion: 'HTTP/2', headers: hdr({ 'cache-control': 'no-store', 'content-type': mime, date: new Date().toUTCString(), server: 'nginx', 'x-request-id': 'req-' + (id + 1) }),
+        content: { mimeType: mime, size }, bodySize: size, headersSize: 200 },
+      timings: { blocked: 1, dns: 2, connect: 10, ssl: 6, send: 1, wait: time - 20, receive: 4 },
+    };
+  }
+  const records = [
+    [entry('GET', 'https://app.example.com/', { mime: 'text/html', size: 18000, time: 180, at: 0 }), '<html></html>'],
+    [entry('GET', 'https://app.example.com/static/main.js', { mime: 'text/javascript', size: 240000, time: 320, at: 200 }), 'console.log(1)'],
+    [entry('OPTIONS', 'https://api.example.com/graphql', { status: 204, size: 0 }), ''],
+    [entry('POST', 'https://api.example.com/graphql', { time: 260, body: json({ operationName: 'GetCustomer', variables: { id: 'C-42', first: 10 },
+      query: 'query GetCustomer($id: ID!, $first: Int = 5) { customer(id: $id) { id name licenses(first: $first, filter: {status: [ACTIVE]}) { edges { node { ...LicenseFields seats @include(if: true) } } } } } fragment LicenseFields on License { id sku }' }) }),
+      json({ data: { customer: { id: 'C-42', name: 'Acme', licenses: { edges: [{ node: { id: 'L-1', sku: 'MS-365-E3', seats: 25 } }, { node: { id: 'L-2', sku: 'AZ-RES', seats: 4 } }] }, contacts: [{ email: 'it@acme.test', primary: true }, { email: 'ops@acme.test', primary: false }] } } })],
+    [entry('POST', 'https://api.example.com/graphql', { time: 240, body: json({ operationName: 'GetCustomer', variables: { id: 'C-42', first: 10 },
+      query: 'query GetCustomer($id: ID!, $first: Int = 5) { customer(id: $id) { id name licenses(first: $first, filter: {status: [ACTIVE]}) { edges { node { ...LicenseFields seats @include(if: true) } } } } } fragment LicenseFields on License { id sku }' }) }),
+      json({ data: { customer: { id: 'C-42', name: 'Acme', licenses: { edges: [{ node: { id: 'L-1', sku: 'MS-365-E3', seats: 25 } }, { node: { id: 'L-2', sku: 'AZ-RES', seats: 4 } }] }, contacts: [{ email: 'it@acme.test', primary: true }, { email: 'ops@acme.test', primary: false }] } } })],
+    [entry('OPTIONS', 'https://api.example.com/graphql', { status: 204, size: 0 }), ''],
+    [entry('POST', 'https://api.example.com/graphql', { body: json({ operationName: 'UpdateOrder', variables: { input: { id: 7, qty: 3 } },
+      query: 'mutation UpdateOrder($input: OrderInput!) { updateOrder(input: $input) { id status } }' }) }),
+      json({ data: { updateOrder: null }, errors: [{ message: 'Order is locked', path: ['updateOrder'], extensions: { code: 'FORBIDDEN' } }] })],
+    [entry('POST', 'https://api.example.com/graphql', { body: json([{ query: '{ viewer { id } }' }, { operationName: 'Notifications', query: 'query Notifications { notifications { id } unreadCount }' }]) }),
+      json([{ data: { viewer: { id: 1 } } }, { data: { notifications: [], unreadCount: 0 } }])],
+    [entry('GET', 'https://api.example.com/graphql?operationName=Persisted&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%22ab12cd%22%7D%7D'),
+      json({ data: { ok: true } })],
+    [entry('GET', 'https://api.example.com/v1/users?page=2'), json({ users: [{ id: 1 }] })],
+    [entry('GET', 'https://cdn.example.com/missing.png', { status: 404, mime: 'text/html', size: 300 }), 'Not found'],
+  ].map(([e, content]) => ({ id: ++id, entry: e, content, encoding: null }));
+
+  // A live graphql-ws subscription
+  const wsStart = t0 + 1500;
+  const m = (dir, dt, obj) => ({ dir, time: wsStart + dt, data: json(obj) });
+  records.push({
+    id: ++id, content: null, encoding: null,
+    entry: { startedDateTime: new Date(wsStart).toISOString(), time: 0, _resourceType: 'websocket',
+      request: { method: 'GET', url: 'wss://api.example.com/graphql', headers: [], queryString: [] },
+      response: { status: 101, statusText: 'Switching Protocols', headers: [], content: { mimeType: '', size: 0 } }, timings: {} },
+    socket: { kind: 'ws', protocol: 'graphql-transport-ws', state: 'open', messages: [
+      m('out', 5, { type: 'connection_init', payload: {} }),
+      m('in', 40, { type: 'connection_ack' }),
+      m('out', 60, { id: '1', type: 'subscribe', payload: { operationName: 'OnOrderUpdated', variables: { customerId: 'C-42' }, query: 'subscription OnOrderUpdated($customerId: ID!) { orderUpdated(customerId: $customerId) { id status updatedAt } }' } }),
+      m('in', 900, { id: '1', type: 'next', payload: { data: { orderUpdated: { id: 7, status: 'PROCESSING', updatedAt: '2026-11-13T14:00:01Z' } } } }),
+      m('in', 1900, { id: '1', type: 'next', payload: { data: { orderUpdated: { id: 7, status: 'SHIPPED', updatedAt: '2026-11-13T14:00:02Z' } } } }),
+      m('out', 2100, { type: 'ping' }),
+      m('in', 2120, { type: 'pong' }),
+    ] },
+  });
+
+  window.demoRecords = records;
+  const qs = new URLSearchParams(location.search);
+  if (qs.has('reset')) Object.keys(localStorage).filter((k) => k.startsWith('ni.')).forEach((k) => localStorage.removeItem(k));
+  if (qs.has('seedSaved')) localStorage.setItem('ni.saved', JSON.stringify([
+    { id: 's1', name: 'GetCustomer (C-42)', savedAt: Date.now(), draft: { method: 'POST', url: 'https://api.example.com/graphql', headers: 'content-type: application/json', mode: 'graphql', body: '', operationName: 'GetCustomer', query: 'query GetCustomer($id: ID!) {\n  customer(id: $id) {\n    id\n    name\n  }\n}', variables: '{\n  "id": "C-42"\n}', extensions: '' } },
+    { id: 's2', name: 'List users page 2', savedAt: Date.now(), draft: { method: 'GET', url: 'https://api.example.com/v1/users?page=2', headers: 'accept: application/json', mode: 'raw', body: '', operationName: '', query: '', variables: '', extensions: '' } },
+  ]));
+  if (qs.has('bookmark')) localStorage.setItem('ni.bookmarks', JSON.stringify(qs.get('bookmark').split(',')));
+  if (qs.has('pin')) localStorage.setItem('ni.pinnedHeaders', JSON.stringify(qs.get('pin').split(',').filter(Boolean)));
+
+  // Load synchronously so everything is rendered by the top-level load event
+  // (lets `firefox --headless --screenshot` capture it).
+  const xhr = new XMLHttpRequest();
+  xhr.open('GET', '../panel/panel.html', false);
+  xhr.send();
+  // Stubs: the browser API, and a BroadcastChannel that answers "hello" with the fake records.
+  const stub = `<script>
+    window.browser = parent.browser;
+    window.BroadcastChannel = class {
+      postMessage(m) { if (m && m.type === 'hello') this.onmessage({ data: { type: 'snapshot', records: parent.demoRecords } }); }
+    };
+  <\/script>`;
+  const autoSelect = `<script>
+    ${qs.get('select') ? `document.querySelector('.row[data-id="${Number(qs.get('select'))}"]')?.click();` : ''}
+    ${qs.get('tab') ? `document.querySelector('#tabs button[data-tab="${qs.get('tab').replace(/\W/g, '')}"]')?.click();` : ''}
+    ${qs.get('op') ? `(() => { const s = document.querySelector('#opFilter'); s.value = ${JSON.stringify(qs.get('op'))}; s.dispatchEvent(new Event('change')); })();` : ''}
+    ${qs.get('search') ? `(() => { const i = document.querySelector('.tree-search'); i.value = ${JSON.stringify(qs.get('search'))}; i.dispatchEvent(new Event('input')); })();` : ''}
+    ${qs.get('click') ? qs.get('click').split('|').map((sel) => `document.querySelector(${JSON.stringify(sel)})?.click();`).join('\n') : ''}
+  <\/script>`;
+  if (qs.has('wait')) document.body.append(Object.assign(new Image(), { src: `/slow?ms=${Number(qs.get('wait')) || 600}` }));
+  frame.srcdoc = xhr.responseText
+    .replace('<head>', `<head><base href="../panel/">${stub}`)
+    .replace('</body>', `${autoSelect}</body>`);
+</script>
+</body>
+</html>

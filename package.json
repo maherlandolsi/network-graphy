@@ -1,0 +1,34 @@
+{
+  "name": "network-graphy",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Network+ — a GraphQL-aware network inspector for Firefox DevTools.",
+  "license": "MIT",
+  "author": "Maher Landolsi",
+  "homepage": "https://github.com/maherlandolsi/network-graphy#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maherlandolsi/network-graphy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/maherlandolsi/network-graphy/issues"
+  },
+  "keywords": [
+    "firefox",
+    "devtools",
+    "webextension",
+    "graphql",
+    "network",
+    "har",
+    "websocket"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "node test/server.js",
+    "package": "sh scripts/package.sh",
+    "check": "for f in background.js content/*.js devtools/*.js lib/*.js panel/*.js test/*.js; do node --check \"$f\" || exit 1; done && node -e \"JSON.parse(require('fs').readFileSync('manifest.json'))\""
+  }
+}

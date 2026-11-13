@@ -1,0 +1,133 @@
+<!doctype html>
+<!--
+  Live test page for trying Network+ end to end. Serve it with the dev server:
+    node test/server.js  →  http://localhost:8000/test/live.html
+  Queries go to a public GraphQL demo API (cross-origin JSON POSTs trigger
+  CORS preflight OPTIONS requests); subscriptions and SSE use the local server.
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Network+ live test</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+    button { font: inherit; margin: 4px 4px 4px 0; padding: 6px 12px; cursor: pointer; }
+    pre { background: #f4f4f5; padding: 10px; border-radius: 6px; max-height: 300px; overflow: auto; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Network+ live test</h1>
+  <p>Open DevTools → <b>Network+</b>, then click the buttons. Requests go to the public
+    <code>countries.trevorblades.com</code> GraphQL demo API.</p>
+  <div>
+    <button data-run="query">Named query</button>
+    <button data-run="anonymous">Anonymous query</button>
+    <button data-run="variables">Query with variables</button>
+    <button data-run="batch">Batched (2 ops)</button>
+    <button data-run="get">GET query</button>
+    <button data-run="error">Query with error</button>
+    <button data-run="rest">Non-GraphQL request</button>
+    <button data-run="duplicate">Duplicate calls (×3)</button>
+    <button data-run="all">Run all</button>
+  </div>
+  <h2>Live updates <small>(local dev server)</small></h2>
+  <div>
+    <button data-live="subscription">GraphQL subscription (WebSocket)</button>
+    <button data-live="broken">Subscription with error</button>
+    <button data-live="sse">Server-Sent Events</button>
+  </div>
+  <pre id="out">Click a button…</pre>
+
+<script>
+  const API = 'https://countries.trevorblades.com/graphql';
+  const out = document.getElementById('out');
+
+  const post = (body) => fetch(API, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const runs = {
+    query: () => post({
+      operationName: 'GetContinents',
+      query: 'query GetContinents { continents { code name countries { code name } } }',
+    }),
+    anonymous: () => post({ query: '{ languages { code name native } }' }),
+    variables: () => post({
+      operationName: 'GetCountry',
+      variables: { code: 'TN' },
+      query: 'query GetCountry($code: ID!) { country(code: $code) { name capital currency emoji languages { name } continent { name } } }',
+    }),
+    batch: () => post([
+      { operationName: 'CountryFR', query: 'query CountryFR { country(code: "FR") { name } }' },
+      { operationName: 'CountryUS', query: 'query CountryUS { country(code: "US") { name } }' },
+    ]),
+    get: () => fetch(`${API}?${new URLSearchParams({
+      operationName: 'GetCountryGet',
+      query: 'query GetCountryGet { country(code: "JP") { name emoji } }',
+    })}`),
+    error: () => post({
+      operationName: 'BrokenQuery',
+      query: 'query BrokenQuery { country(code: "TN") { name doesNotExist } }',
+    }),
+    rest: () => fetch('https://countries.trevorblades.com/'),
+    duplicate: async () => {
+      const once = () => post({ operationName: 'GetCountryAgain', variables: { code: 'DE' }, query: 'query GetCountryAgain($code: ID!) { country(code: $code) { name } }' });
+      await once(); await once(); return once();
+    },
+  };
+
+  // ---------- live updates (needs node test/server.js) ----------
+  let socket = null;
+  let subId = 0;
+  function withSocket(fn) {
+    if (socket && socket.readyState === WebSocket.OPEN) return fn(socket);
+    socket = new WebSocket(`ws://${location.host}/graphql`, 'graphql-transport-ws');
+    socket.onopen = () => socket.send(JSON.stringify({ type: 'connection_init', payload: {} }));
+    socket.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'connection_ack') fn(socket);
+      out.textContent = `subscription: ${e.data}`;
+    };
+    socket.onerror = () => { out.textContent = 'WebSocket error — is node test/server.js running?'; };
+  }
+  const live = {
+    subscription: () => withSocket((s) => s.send(JSON.stringify({
+      id: String(++subId), type: 'subscribe',
+      payload: { operationName: 'OnOrderUpdated', variables: { orderId: 7 }, query: 'subscription OnOrderUpdated($orderId: ID!) { orderUpdated(orderId: $orderId) { id status seq } }' },
+    }))),
+    broken: () => withSocket((s) => s.send(JSON.stringify({
+      id: String(++subId), type: 'subscribe',
+      payload: { operationName: 'BrokenSubscription', query: 'subscription BrokenSubscription { orderUpdated(orderId: 1) { id } }' },
+    }))),
+    sse: () => {
+      const es = new EventSource('/sse');
+      es.addEventListener('price', (e) => { out.textContent = `sse price: ${e.data}`; });
+      es.onmessage = (e) => { out.textContent = `sse: ${e.data}`; };
+      es.onerror = () => es.close();
+    },
+  };
+
+  async function run(name) {
+    const names = name === 'all' ? Object.keys(runs) : [name];
+    for (const n of names) {
+      try {
+        const res = await runs[n]();
+        const text = await res.text();
+        out.textContent = `${n}: HTTP ${res.status}\n${text.slice(0, 2000)}`;
+      } catch (err) {
+        out.textContent = `${n}: ${err}`;
+      }
+    }
+  }
+
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('button[data-run]');
+    if (btn) run(btn.dataset.run);
+    const liveBtn = ev.target.closest('button[data-live]');
+    if (liveBtn) live[liveBtn.dataset.live]();
+  });
+</script>
+</body>
+</html>

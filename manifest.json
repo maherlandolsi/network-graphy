@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "Network+ (GraphQL Network Inspector)",
+  "short_name": "Network+",
+  "version": "0.2.0",
+  "description": "A DevTools network inspector with GraphQL support: operation names in the request list, formatted queries, live subscriptions, edit & resend, HAR/Postman export, and an option to hide OPTIONS preflight requests.",
+  "homepage_url": "https://github.com/maherlandolsi/network-graphy",
+  "devtools_page": "devtools/devtools.html",
+  "permissions": [
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/hook.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content/relay.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "icons": {
+    "48": "icons/icon.svg",
+    "96": "icons/icon.svg"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "network-graphy@maherlandolsi",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  }
+}

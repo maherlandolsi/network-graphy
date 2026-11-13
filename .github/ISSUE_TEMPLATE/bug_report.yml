@@ -1,0 +1,37 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open DevTools → Network+ on …
+        2. …
+    validations:
+      required: true
+  - type: input
+    id: firefox
+    attributes:
+      label: Firefox version
+      placeholder: e.g. 160.0
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Network+ version
+      placeholder: e.g. 0.2.0
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots, console errors or HAR export
+      description: Remove cookies, tokens and other sensitive data before attaching a HAR file.

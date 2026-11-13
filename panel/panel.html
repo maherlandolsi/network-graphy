@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Network+</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <header id="toolbar">
+    <button id="clear" class="icon-btn" title="Clear (Ctrl+L)">
+      <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.8 12.2l8.4-8.4" stroke="currentColor" stroke-width="1.5"/></svg>
+    </button>
+    <input id="filter" type="search" placeholder="Filter URLs, methods, GraphQL operations…" spellcheck="false">
+    <select id="opFilter" title="Show only one GraphQL operation">
+      <option value="">All operations</option>
+    </select>
+    <button id="bookmarkedOnly" class="toggle-btn" title="Show only bookmarked requests" aria-pressed="false">★</button>
+    <div id="types" role="group" aria-label="Request type">
+      <button data-type="all" class="active">All</button>
+      <button data-type="graphql">GraphQL</button>
+      <button data-type="xhr">XHR</button>
+      <button data-type="ws">WS</button>
+      <button data-type="doc">HTML</button>
+      <button data-type="js">JS</button>
+      <button data-type="css">CSS</button>
+      <button data-type="img">Images</button>
+      <button data-type="font">Fonts</button>
+      <button data-type="media">Media</button>
+      <button data-type="other">Other</button>
+    </div>
+    <span class="spacer"></span>
+    <label class="check"><input id="hideOptions" type="checkbox"> Hide OPTIONS</label>
+    <label class="check"><input id="preserveLog" type="checkbox"> Preserve log</label>
+    <button id="savedBtn" class="tool-btn" title="Saved requests">Saved</button>
+    <button id="importBtn" class="tool-btn" title="Import a HAR file">Import</button>
+    <button id="exportBtn" class="tool-btn" title="Export">Export ▾</button>
+    <button id="columnsBtn" class="icon-btn" title="Columns">
+      <svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 3h12M2 8h12M2 13h12" stroke="currentColor" stroke-width="1.5"/><circle cx="5" cy="3" r="1.6" fill="currentColor"/><circle cx="11" cy="8" r="1.6" fill="currentColor"/><circle cx="7" cy="13" r="1.6" fill="currentColor"/></svg>
+    </button>
+    <input id="importFile" type="file" accept=".har,.json,application/json" hidden>
+  </header>
+
+  <main id="main">
+    <section id="list" tabindex="0">
+      <div id="listHead" class="row head"></div>
+      <div id="rows"></div>
+      <div id="empty">Perform a request or reload the page to see network activity.</div>
+    </section>
+    <div id="splitter" hidden></div>
+    <section id="details" hidden>
+      <nav id="tabs">
+        <span id="detailTitle" hidden></span>
+        <button data-tab="headers">Headers</button>
+        <button data-tab="payload">Payload</button>
+        <button data-tab="response">Response</button>
+        <button data-tab="messages">Messages</button>
+        <button data-tab="timings">Timings</button>
+        <button data-tab="resend" title="Edit and resend this request">Edit &amp; Resend</button>
+        <span class="spacer"></span>
+        <button id="closeDetails" class="icon-btn" title="Close (Esc)">✕</button>
+      </nav>
+      <div id="detailBody"></div>
+    </section>
+  </main>
+
+  <footer id="statusbar"></footer>
+
+  <script src="../lib/graphql.js"></script>
+  <script src="../lib/exporters.js"></script>
+  <script src="tree.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>
