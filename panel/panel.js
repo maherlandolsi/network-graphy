@@ -3,6 +3,7 @@
   const G = window.GraphQLUtils;
   const X = window.Exporters;
   const T = window.JsonTree;
+  const F = window.CodeFormatters;
   const $ = (sel) => document.querySelector(sel);
   const VERSION = (() => { try { return browser.runtime.getManifest().version; } catch (e) { return 'dev'; } })();
 
@@ -226,6 +227,7 @@
     sort: store.get('sort', null), // { key, dir: 1 | -1 }
     columns: Object.assign({ hidden: {}, widths: {} }, store.get('columns', {})),
     responseView: store.get('responseView', 'tree'),
+    codeView: store.get('codeView', 'pretty'),
     treeSearch: '', // kept while you move between requests, so you can compare the same field
     msgFilter: '',
     range: { min: Infinity, max: -Infinity },
@@ -762,6 +764,18 @@
     if (state.selectedId === r.id && state.view === 'record' && state.tab === 'headers') renderDetails({ keepScroll: true });
   }
 
+  /** On navigation: drop the previous page's records, keep the new page's document and what followed it. */
+  function clearBefore(id) {
+    state.records = state.records.filter((r) => r.id >= id);
+    state.byId = new Map(state.records.map((r) => [r.id, r]));
+    state.dupIndex.clear();
+    state.range = { min: Infinity, max: -Infinity };
+    for (const r of state.records) extendRange(r);
+    if (state.view === 'record' && state.selectedId != null && !state.byId.has(state.selectedId)) closeDetails();
+    renderAll();
+    renderOpOptions();
+  }
+
   function clearAll({ notify = true } = {}) {
     state.records = [];
     state.byId.clear();
@@ -1121,12 +1135,69 @@
     const text = b.text;
     if (!text) return h('div', { class: 'note' }, 'Empty response body.');
     const json = G.tryJson(text);
+    const isJson = json !== undefined && json !== null && typeof json === 'object';
+    const lang = isJson ? 'json' : F.detectLanguage(b.mime, r.entry.request.url, text);
     const wrap = h('div', null, h('div', { class: 'toolbar-line' },
       copyBtn('Copy response', text),
-      h('span', { class: 'muted' }, json !== undefined ? 'JSON' : (b.mime || '')),
+      h('span', { class: 'muted' }, isJson ? 'JSON' : (lang !== 'text' ? `${F.LABELS[lang]} · ${b.mime || ''}` : (b.mime || ''))),
       h('span', { class: 'muted' }, fmtBytes(text.length))));
     if (r.gqlErrors.length) wrap.append(errorsBox(r.gqlErrors));
-    wrap.append(json !== undefined && json !== null && typeof json === 'object' ? jsonView(json, text) : codeBlock(G.escapeHtml(text)));
+    if (isJson) wrap.append(jsonView(json, text));
+    else if (lang === 'text' || lang === 'json') wrap.append(codeBlock(G.escapeHtml(text)));
+    else wrap.append(codeView(r, b, lang));
+    return wrap;
+  }
+
+  // HTML / XML / SVG / JavaScript / CSS: Pretty (formatted + highlighted), Raw, and Preview for HTML and SVG.
+  const MAX_FORMAT = 3_000_000;
+  const MAX_CODE_HIGHLIGHT = 500_000; // larger files are shown as plain text so the panel stays responsive
+  function codeView(r, b, lang) {
+    const text = b.text;
+    const isSvg = /svg/i.test(b.mime) || /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/i.test(text.slice(0, 500));
+    const canPreview = lang === 'html' || isSvg;
+    // JavaScript is shown as received: reformatting minified bundles is slow and rarely useful.
+    const canFormat = lang !== 'js';
+    const views = (canFormat ? ['pretty', 'raw'] : ['raw']).concat(canPreview ? ['preview'] : []);
+    let view = views.includes(state.codeView) ? state.codeView : views[0];
+    const seg = (v, label) => h('button', {
+      class: `seg${view === v ? ' active' : ''}`,
+      onclick: () => { state.codeView = v; store.set('codeView', v); renderDetails({ keepScroll: true }); },
+    }, label);
+    const wrap = h('div');
+    const bar = h('div', { class: 'toolbar-line' });
+    if (views.length > 1) {
+      bar.append(h('span', { class: 'segmented' }, canFormat ? seg('pretty', 'Pretty') : null, seg('raw', 'Raw'), canPreview ? seg('preview', 'Preview') : null));
+      wrap.append(bar);
+    }
+
+    if (view === 'preview') {
+      if (isSvg) {
+        const bytes = new TextEncoder().encode(text);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        wrap.append(h('img', { class: 'preview-img', src: `data:image/svg+xml;base64,${btoa(bin)}`, alt: '' }));
+      } else {
+        // Sandboxed without allow-scripts: the page's scripts never run. <base> makes relative images and styles resolve.
+        const base = `<base href="${G.escapeHtml(r.entry.request.url)}">`;
+        const doc = /<head[^>]*>/i.test(text) ? text.replace(/<head[^>]*>/i, (m) => m + base) : base + text;
+        wrap.append(h('iframe', { class: 'html-preview', sandbox: '', referrerpolicy: 'no-referrer', srcdoc: doc, title: 'HTML preview' }),
+          h('div', { class: 'muted hint' }, 'Preview without scripts.'));
+      }
+      return wrap;
+    }
+
+    let shown = text;
+    if (view === 'pretty') {
+      if (text.length <= MAX_FORMAT) {
+        if (b.pretty == null) { try { b.pretty = F.format(lang, text); } catch (e) { b.pretty = text; } }
+        shown = b.pretty;
+      } else {
+        bar.append(h('span', { class: 'muted' }, 'Too large to format; showing raw.'));
+      }
+      if (shown !== text) bar.append(copyBtn('Copy formatted', shown));
+    }
+    const html = shown.length > MAX_CODE_HIGHLIGHT ? G.escapeHtml(shown) : F.highlight(lang, shown);
+    wrap.append(h('pre', { class: `code${view === 'pretty' ? ' nowrap' : ''}`, html }));
     return wrap;
   }
 
@@ -1567,10 +1638,48 @@
         section('Extensions', codeArea(d, 'extensions', { rows: 3, placeholder: '(optional)' }), { open: !!d.extensions.trim() }));
     } else {
       const canBeGql = (() => { const j = G.tryJson(d.body); return j && typeof j === 'object' && !Array.isArray(j) && typeof j.query === 'string'; })();
+      const bodyArea = codeArea(d, 'body', { placeholder: '(empty)' });
+      const isJsonType = () => /^content-type\s*:.*json/im.test(d.headers);
+      const bodyInfo = h('div', { class: 'muted hint body-info' });
+      const checkBody = () => {
+        const t = d.body.trim();
+        let msg = '';
+        let bad = false;
+        if (t && (isJsonType() || /^[[{]/.test(t))) {
+          try { JSON.parse(t); msg = 'Valid JSON'; } catch (e) { msg = `Invalid JSON: ${e.message}`; bad = true; }
+        }
+        bodyInfo.textContent = msg;
+        bodyInfo.classList.toggle('bad', bad);
+      };
+      let checkTimer;
+      bodyArea.addEventListener('input', () => { clearTimeout(checkTimer); checkTimer = setTimeout(checkBody, 250); });
+      checkBody();
+      const rewriteBody = (fn, label) => (ev) => {
+        ev.preventDefault();
+        const t = d.body.trim();
+        if (!t) return;
+        try {
+          d.body = fn(t);
+        } catch (e) {
+          // application/x-www-form-urlencoded: one "key=value" per line ↔ "a=1&b=2".
+          if (/^[^\s{[]+=/.test(t) && !/^\s*[[{]/.test(t)) d.body = label === 'format' ? t.split('&').join('\n') : t.split(/\n+/).map((l) => l.trim()).filter(Boolean).join('&');
+          else { bodyInfo.textContent = `Invalid JSON: ${e.message}`; bodyInfo.classList.add('bad'); return; }
+        }
+        bodyArea.value = d.body;
+        bodyArea.rows = Math.min(24, Math.max(3, d.body.split('\n').length + 1));
+        checkBody();
+      };
+      const noBody = /^(GET|HEAD)$/i.test(d.method.trim()) && !d.body.trim();
+      const actions = noBody ? [] : [
+        h('button', { class: 'small-btn', title: 'Pretty-print the JSON body', onclick: rewriteBody((t) => JSON.stringify(JSON.parse(t), null, 2), 'format') }, 'Format JSON'),
+        h('button', { class: 'small-btn', title: 'Compact the JSON body on one line', onclick: rewriteBody((t) => JSON.stringify(JSON.parse(t)), 'minify') }, 'Minify'),
+      ];
+      if (canBeGql) actions.push(h('button', { class: 'small-btn', onclick: (ev) => { ev.preventDefault(); switchMode('graphql'); } }, 'Edit as GraphQL'));
       form.append(section('Body', h('div', null,
-        codeArea(d, 'body', { placeholder: '(empty)' }),
+        bodyArea,
+        bodyInfo,
         /^(GET|HEAD)$/i.test(d.method.trim()) ? h('div', { class: 'muted hint' }, 'GET and HEAD requests are sent without a body.') : null),
-      { actions: canBeGql ? [h('button', { class: 'small-btn', onclick: (ev) => { ev.preventDefault(); switchMode('graphql'); } }, 'Edit as GraphQL')] : [] }));
+      { actions }));
     }
 
     form.addEventListener('keydown', (ev) => {
@@ -1923,7 +2032,9 @@
         onSocketState(data);
         break;
       case 'navigated':
-        if (!state.preserveLog) clearAll({ notify: false });
+        if (state.preserveLog) break;
+        if (data.keepFromId != null) clearBefore(data.keepFromId);
+        else clearAll({ notify: false });
         break;
       case 'resendResult': {
         const cb = state.resendCallbacks.get(data.reqId);

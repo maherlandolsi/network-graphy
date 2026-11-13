@@ -41,8 +41,12 @@
     };
   }
   const records = [
-    [entry('GET', 'https://app.example.com/', { mime: 'text/html', size: 18000, time: 180, at: 0 }), '<html></html>'],
-    [entry('GET', 'https://app.example.com/static/main.js', { mime: 'text/javascript', size: 240000, time: 320, at: 200 }), 'console.log(1)'],
+    [entry('GET', 'https://app.example.com/', { mime: 'text/html', size: 18000, time: 180, at: 0 }),
+      '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Acme Portal</title><link rel="stylesheet" href="/static/app.css"></head><body><header class="top"><h1>Acme Portal</h1><nav><a href="/orders">Orders</a> <a href="/licenses">Licenses</a></nav></header><main id="app"><p class="lead">Welcome back, <b>Acme</b>.</p><ul class="cards"><li>25 seats</li><li>4 reservations</li></ul></main><script>window.__CONFIG__={api:"https://api.example.com/graphql",env:"prod"};<\/script><script src="/static/main.js"><\/script></body></html>'],
+    [entry('GET', 'https://app.example.com/static/main.js', { mime: 'text/javascript', size: 240000, time: 320, at: 200 }),
+      '"use strict";(()=>{const e=window.__CONFIG__||{};async function t(n,r={}){const s=await fetch(e.api,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({query:n,variables:r})});if(!s.ok)throw new Error(`HTTP ${s.status}`);const{data:o,errors:a}=await s.json();return a?.length?(console.warn(a),null):o}function n(c){return c.edges.map(({node:i})=>i).filter(i=>/^MS-/.test(i.sku))}document.addEventListener("DOMContentLoaded",async()=>{const c=await t("query GetCustomer($id: ID!) { customer(id: $id) { id name } }",{id:"C-42"});c&&(document.title=c.customer.name+" | Acme",n(c.customer.licenses||{edges:[]}).forEach(l=>console.log(l.id,l.seats>10?"large":"small")))})})();'],
+    [entry('GET', 'https://app.example.com/static/app.css', { mime: 'text/css', size: 12000, time: 90, at: 210 }),
+      ':root{--accent:#0061e0;--radius:6px}body{margin:0;font:14px/1.5 system-ui,sans-serif;color:#1d1d1f}header.top{display:flex;align-items:center;gap:16px;padding:8px 16px;background:var(--accent)}header.top a:hover,header.top a:focus-visible{text-decoration:underline!important}.cards>li{border-radius:var(--radius);box-shadow:0 1px 3px rgba(0,0,0,.2)}@media (max-width:600px){header.top{flex-direction:column}.cards{padding:0}}'],
     [entry('OPTIONS', 'https://api.example.com/graphql', { status: 204, size: 0 }), ''],
     [entry('POST', 'https://api.example.com/graphql', { time: 260, body: json({ operationName: 'GetCustomer', variables: { id: 'C-42', first: 10 },
       query: 'query GetCustomer($id: ID!, $first: Int = 5) { customer(id: $id) { id name licenses(first: $first, filter: {status: [ACTIVE]}) { edges { node { ...LicenseFields seats @include(if: true) } } } } } fragment LicenseFields on License { id sku }' }) }),
@@ -59,6 +63,7 @@
     [entry('GET', 'https://api.example.com/graphql?operationName=Persisted&extensions=%7B%22persistedQuery%22%3A%7B%22version%22%3A1%2C%22sha256Hash%22%3A%22ab12cd%22%7D%7D'),
       json({ data: { ok: true } })],
     [entry('GET', 'https://api.example.com/v1/users?page=2'), json({ users: [{ id: 1 }] })],
+    [entry('POST', 'https://api.example.com/v1/orders', { status: 201, body: '{"customerId":"C-42","items":[{"sku":"MS-365-E3","qty":5},{"sku":"AZ-RES","qty":1}],"notes":null}' }), json({ id: 7, status: 'CREATED' })],
     [entry('GET', 'https://cdn.example.com/missing.png', { status: 404, mime: 'text/html', size: 300 }), 'Not found'],
   ].map(([e, content]) => ({ id: ++id, entry: e, content, encoding: null }));
 

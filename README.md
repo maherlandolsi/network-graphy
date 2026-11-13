@@ -36,6 +36,7 @@ In the built-in Network panel every GraphQL call looks the same: `POST /graphql`
 ![Formatted GraphQL query and variables](docs/screenshots/graphql-query.png)
 
 ### Inspecting responses
+- **HTML, XML/SVG and CSS** responses are pretty-printed and syntax-highlighted, with a sandboxed **preview** for HTML and SVG. JavaScript is highlighted and shown as received.
 - **JSON tree** with a Tree/Raw toggle; click any key to copy its path (`data.customer.licenses.edges[0]`).
 - **Tree search** by key and/or value that shows a filtered tree with highlights and original array indexes:
 
@@ -53,7 +54,7 @@ In the built-in Network panel every GraphQL call looks the same: `POST /graphql`
 
 ### Working with requests
 - **Hide OPTIONS** preflight requests (on by default).
-- **Edit & Resend** — edit method, URL, headers and body (for GraphQL: operation name, query and variables as separate fields). The request is replayed from the page, with its cookies and CORS rules.
+- **Edit & Resend** — edit method, URL, headers and body (for GraphQL: operation name, query and variables as separate fields; for JSON bodies: *Format JSON*, *Minify* and live validation). The request is replayed from the page, with its cookies and CORS rules.
 - **Saved requests** — keep requests to edit and replay later; export them as a Postman collection.
 - **Copy as** URL, cURL, `fetch()`, Postman collection or response, from *Copy ▾* or the right-click menu.
 - **Export / import HAR** (all or filtered, with response bodies and socket messages) to attach to a ticket. Imports HAR files from Network+, Firefox or Chrome.
@@ -93,7 +94,7 @@ It asks for access to all sites only because Firefox's DevTools API doesn't expo
 No dependencies and no build step. You need Node.js 20+.
 
 ```sh
-npm test         # unit tests: GraphQL parsing & formatting, exporters, HAR, tree search
+npm test         # unit tests: GraphQL, code formatters, exporters, HAR, tree search
 npm start        # dev server → http://localhost:8000/test/live.html
 npm run check    # syntax-check every script and the manifest
 npm run package  # build dist/network-plus-<version>.zip
@@ -113,6 +114,7 @@ devtools/devtools.js   Captures requests and bodies, replays Edit & Resend
 panel/                 Panel UI and JSON tree
 lib/graphql.js         GraphQL detection, parsing, formatting, highlighting
 lib/exporters.js       cURL, fetch, Postman v2.1, HAR import/export
+lib/formatters.js      HTML / XML / JS / CSS pretty-printing and highlighting
 scripts/package.sh     Builds the zip for signing
 test/                  Unit tests, demo page, live test page, dev server
 ```

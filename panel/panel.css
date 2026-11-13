@@ -573,3 +573,9 @@ table.kv.headers tr.pinned + tr:not(.pinned) td { border-top: 1px solid var(--bo
 .jt-mark { background: color-mix(in srgb, var(--warn) 35%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
 .jt-hit-line { background: color-mix(in srgb, var(--warn) 8%, transparent); }
 .jt-filtered { color: var(--fg-dim); font-size: 10px; }
+
+/* code responses (HTML / JS / CSS / XML) */
+pre.code.nowrap { white-space: pre; overflow: auto; word-break: normal; }
+.html-preview { display: block; width: 100%; height: 60vh; min-height: 240px; border: 1px solid var(--border); border-radius: 4px; background: #fff; margin-top: 6px; }
+.body-info:empty { display: none; }
+.body-info.bad { color: var(--error, #d70022); }

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Network+ (GraphQL Network Inspector)",
   "short_name": "Network+",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "A DevTools network inspector with GraphQL support: operation names in the request list, formatted queries, live subscriptions, edit & resend, HAR/Postman export, and an option to hide OPTIONS preflight requests.",
   "homepage_url": "https://github.com/maherlandolsi/network-graphy",
   "devtools_page": "devtools/devtools.html",

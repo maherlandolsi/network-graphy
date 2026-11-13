@@ -23,6 +23,7 @@ For UI work without reloading the extension, open `http://localhost:8000/test/de
 |---|---|
 | GraphQL detection, parsing, formatting | `lib/graphql.js` |
 | cURL / fetch / Postman / HAR | `lib/exporters.js` |
+| HTML / XML / JS / CSS formatting | `lib/formatters.js` |
 | JSON tree and tree search | `panel/tree.js` |
 | Panel UI | `panel/panel.js`, `panel/panel.css` |
 | Request capture, Edit & Resend | `devtools/devtools.js` |

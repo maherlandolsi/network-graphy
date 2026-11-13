@@ -42,6 +42,7 @@ function getContent(entry) {
 }
 
 function pushRecord(record) {
+  claimPendingDocument(record);
   buffer.push(record);
   if (buffer.length > MAX_RECORDS) buffer = buffer.slice(-MAX_RECORDS);
   channel.postMessage({ type: 'entry', record });
@@ -57,12 +58,47 @@ browser.devtools.network.onRequestFinished.addListener(async (entry) => {
   pushRecord(record);
 });
 
-browser.devtools.network.onNavigated.addListener((url) => {
-  if (!preserveLog()) {
-    buffer = [];
-    sockets.clear();
+// Firefox may report a navigation after the new page's document (and its first subresources) have already
+// finished, or before. Records from that document onward belong to the new page and are kept; only older ones
+// are cleared. Each document is claimed by one navigation only, so a quick reload never mistakes the previous
+// page's document for the new one.
+const normUrl = (u) => String(u).split('#')[0];
+let claimedDocId = 0; // newest document already attributed to a navigation
+let pendingNavUrl = null; // navigation reported before its document arrived
+
+function isDocFor(record, url) {
+  return !record.socket && record.entry.request.method === 'GET' && normUrl(record.entry.request.url) === normUrl(url);
+}
+
+function navigationStartId(url) {
+  for (let i = buffer.length - 1; i >= 0 && buffer[i].id > claimedDocId; i--) {
+    if (isDocFor(buffer[i], url)) return buffer[i].id;
   }
-  channel.postMessage({ type: 'navigated', url });
+  return null;
+}
+
+function claimPendingDocument(record) {
+  if (pendingNavUrl && isDocFor(record, pendingNavUrl)) {
+    claimedDocId = record.id;
+    pendingNavUrl = null;
+  }
+}
+
+browser.devtools.network.onNavigated.addListener((url) => {
+  const docId = navigationStartId(url);
+  if (docId != null) { claimedDocId = docId; pendingNavUrl = null; } else pendingNavUrl = url;
+  let keepFromId = null;
+  if (!preserveLog()) {
+    if (docId == null) {
+      buffer = [];
+      sockets.clear();
+    } else {
+      keepFromId = docId;
+      buffer = buffer.filter((r) => r.id >= docId);
+      for (const [key, r] of sockets) if (r.id < docId) sockets.delete(key);
+    }
+  }
+  channel.postMessage({ type: 'navigated', url, keepFromId });
 });
 
 // ---------- WebSocket / EventSource capture (via content/hook.js → relay.js → background.js) ----------
